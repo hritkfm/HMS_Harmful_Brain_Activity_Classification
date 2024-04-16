@@ -1,0 +1,164 @@
+# dataのロード方法をV2(eeg_idでまとめずに全データを使用する方式)に変更
+gpu: 0
+seed: 42
+height: 128 # モデルに入力する画像サイズ
+width: 256
+
+logger:
+  project: kaggle_hms_2024
+  runName: 1D_cls_RTpIcS_LS #1D_cls_wavenet_base
+  mode: debug # "online" or "offline" or "debug"
+
+datamodule:
+  batch_size: 32
+  num_workers: 10
+  pin_memory: False
+  use_sampler: False
+
+checkpoint:
+  save_weights_only: True
+  save_top_k: 1
+  save_last: False
+  every_n_epochs: &every_n_epochs 1
+  monitor: val_metric_kldiv
+  mode: min
+
+train:
+  epoch: &epoch 30
+  # step: 300
+  n_accumulations: 1
+  val_check_interval: 1.0
+  check_val_every_n_epoch: *every_n_epochs
+  amp: True
+  gradient_clip_val: 0.1
+  deterministic: False
+
+dataset:
+  csv_path: ../hms-harmful-brain-activity-classification/train_fold_irr_mark_v2.csv
+  spec_dir_path: ../hms-harmful-brain-activity-classification/train_spectrograms
+  eeg_dir_path: ../hms-harmful-brain-activity-classification/train_eegs
+  # eeg_spec_dir_path: ../hms-harmful-brain-activity-classification/EEG_Spectrograms/ver3_filtered
+  fold: 0
+  k_fold: 4
+  sample_rate: 200
+  use_kspec: False
+  normalize_method: all # "all" or "each"
+  vote_min_thresh: 0
+  without_3votes: False
+  without_miss_seizure: False
+  eeg_nan_ratio_thresh: 1.0
+  spec_nan_ratio_thresh: 1.0
+  feature_type: &feature_type "half" # "half", "standard", "double"
+  downsample: 1 # raw_eegのダウンサンプル。例：5の場合5点ずつサンプリングするので長さが1/5になる
+  cutoff_freq: 20
+  lowpass_filter: "lfilter" # "lfilter" or "sosfilter"
+  label_type: "Classification"
+  label_smoothing_ver: ver_2
+  label_smoothing_k: 10
+  label_smoothing_epsilon: 0.05
+  label_smoothing_n_evaluator: 3
+  for_pseudo_label: False
+  tuh_thsz_dir: "../hms-harmful-brain-activity-classification/tuh-thsz"
+  extra_data_fold: # None, 100: tuh_thsz
+  wave_clip_value: 1024 # 0以下ならclip off
+
+transforms: #最初にクラス名、その後はパラメータ名とパラメータを交互に記載。
+  train:
+    # - ["Reverse", "p", 0.5]
+    - ["TimeMask", "p", 0.2]
+    - ["PolarityInversion", "p", 0.5]
+    - ["ChannelSwap", "p", 0.5]
+    # - ["ChannelShuffle", "p", 0.5]
+    # - ["AddGaussianSNR", "min_snr_in_db", 10, "max_snr_in_db", 40, "p", 0.5]
+    # - ["PinkNoiseSNR", "p", 0.5]
+
+  val:
+
+module:
+  last_n_epoch_refined_augment: -1
+  mix_augmentation: ["mixup"] #["mixup", "zebramix"]
+  p_mix_augmentation: 0.0
+  p_reverse: 0.5
+
+model:
+  # name: HMS1DWaveModel
+  # args:
+  #   feature_type: *feature_type
+  #   pooling: "avg"
+  name: HMS1DModel
+  args:
+    data_split_num: 1 # 1 or 5
+    data_split_ver: "ver2" # ver1:wavenet後に分割、ver2: wavenet入力前に分割(学習時は10s,val時はバッチにスタック)
+    encoder_type: wavenet # wavenet, wavegram, parallelcnn
+    encoder_pooling_type: avg
+    encoder_channel_wise: True
+    encoder_output_size: 256 #320
+    feature_type: *feature_type
+    extracter_type: cnn2d # pooling, cnn2d
+    # extracter_backbone: tf_efficientnet_b0_ns
+    # extracter_backbone: swinv2_tiny_window8_256
+    # extracter_backbone: convnextv2_tiny
+    # extracter_backbone: maxvit_rmlp_tiny_rw_256
+    # extracter_backbone: maxxvit_rmlp_small_rw_256
+    # extracter_backbone: coatnet_0_rw_224
+    extracter_backbone: maxxvitv2_nano_rw_256
+    extracter_pretrained: False
+    extracter_dropout: 0.0
+    extracter_channel_wise: False
+    extracter_stack_diff_channel: False
+    wavenet_params:
+      hidden_channels: [8, 16, 32, 64]
+      downsample: True
+      use_SE_module: False
+    melspec_params:
+      n_fft: 512
+      n_mels: 512
+      win_length: 128
+      trainable_mel: False
+      trainable_STFT: False
+      output_height: 64
+    use_sed_module: False
+    p_manifold_mixup: 0
+    num_classes: 6
+
+  load_checkpoint:
+  freeze_start:
+    target_epoch:
+    unfreeze_params:
+
+loss:
+  # name: KLDivLossWithLogits
+  name: HMSSED1DLoss
+  args:
+    auxiliary_bce_loss: False
+    sed_loss_type: #None or bce or KLDiv
+    loss_weight: [1.0, 0.5, 0.5] # [loss_weight, auxiliary_loss_weight, sed_loss_weight]
+
+optimizer:
+  name: AdamW
+  args:
+    lr: 1.e-3
+    weight_decay: 1.e-2 # 1e-2
+  # name: SGD
+  # args:
+  #   lr: 1.e-2
+  #   weight_decay: 1.e-4
+  #   momentum: 0.9
+  #   nesterov: True
+  # scheduler:
+  #   name: CosineAnnealingLR
+  #   args:
+  #     eta_min: 1.e-6
+  #     last_epoch: -1
+  #     T_max: *epoch
+  #   lr_dict_param:
+  #     interval: epoch
+  scheduler:
+    name: CosineAnnealingWarmupRestarts
+    args:
+      first_cycle_steps: *epoch
+      min_lr: 1.e-6
+      warmup_steps: 3
+    lr_dict_param:
+      interval: epoch
+      # interval: step

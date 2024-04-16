@@ -1,0 +1,113 @@
+gpu: 0
+seed: 42
+height: 512 # モデルに入力する画像サイズ
+width: 512
+
+logger:
+  project: kaggle_hms_2024
+  runName: KESpec2D_effnetb0_hflip_specAug_wd1e-5
+  mode: online # "online" or "offline" or "debug"
+
+datamodule:
+  batch_size: 32
+  num_workers: 10
+  pin_memory: False
+
+checkpoint:
+  save_weights_only: True
+  save_top_k: 1
+  save_last: False
+  every_n_epochs: &every_n_epochs 1
+  monitor: val_loss
+  mode: min
+
+train:
+  epoch: &epoch 10
+  n_accumulations: 1
+  val_check_interval: 1.0
+  check_val_every_n_epoch: *every_n_epochs
+  amp: True
+  gradient_clip_val: 0.0
+  deterministic: False
+
+dataset:
+  csv_path: ../hms-harmful-brain-activity-classification/train_eeg_aggregate_fold.csv
+  spec_dir_path: ../hms-harmful-brain-activity-classification/train_spectrograms
+  spec_npy_path: ../hms-harmful-brain-activity-classification/train_spec.npy
+  eeg_dir_path: ../hms-harmful-brain-activity-classification/train_eegs
+  use_eeg_spec: True
+  eeg_spec_dir_path: ../hms-harmful-brain-activity-classification/EEG_Spectrograms
+  fold: 0
+  k_fold: 4
+  normalize_method: all # "all" or "each"
+  channel_stack: False
+
+transforms:
+  train:
+    - type: HorizontalFlip
+      params:
+        p: 0.5
+    - type: CoarseDropout # 時間方向のSpecAug
+      params:
+        p: 0.5
+        min_holes: 1
+        max_holes: 8
+        max_height: 128
+        min_width: 1
+        max_width: 10
+    - type: CoarseDropout # 周波数方向のSpecAug
+      params:
+        p: 0.5
+        min_holes: 1
+        max_holes: 8
+        min_height: 1
+        max_height: 5
+        max_width: 256
+  val:
+
+module:
+  last_n_epoch_refined_augment: -1
+
+model:
+  name: HMSHBACSpecModel
+  args:
+    # backbone: resnet18d
+    # backbone: resnet34d
+    backbone: tf_efficientnet_b0_ns
+    # backbone: tf_efficientnetv2_b0
+    # backbone: seresnext26ts
+    # backbone: convnext_small_384_in22ft1k
+    # backbone: swinv2_tiny_window8_256 # 256*256, b=32
+    # backbone: swinv2_base_window12to24_192to384_22kft1k # 384*384, b=16
+
+    num_classes: 6
+    in_channels: 1 #1 #4
+    pretrained: True
+  load_checkpoint:
+  freeze_start:
+    target_epoch:
+    unfreeze_params:
+
+loss:
+  name: KLDivLossWithLogits
+
+optimizer:
+  name: AdamW
+  args:
+    lr: 1.e-2
+    weight_decay: 1.e-5 # 1e-2
+  # name: SGD
+  # args:
+  #   lr: 1.e-2
+  #   weight_decay: 1.e-4
+  #   momentum: 0.9
+  #   nesterov: True
+  scheduler:
+    name: CosineAnnealingLR
+    args:
+      eta_min: 1.e-6
+      last_epoch: -1
+      T_max: *epoch
+    lr_dict_param:
+      interval: epoch
+      # interval: step

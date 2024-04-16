@@ -1,0 +1,108 @@
+# dataのロード方法をV2(eeg_idでまとめずに全データを使用する方式)に変更
+gpu: 0
+seed: 42
+height: 128 # モデルに入力する画像サイズ
+width: 256
+
+logger:
+  project: kaggle_hms_2024
+  runName: 1D_cls_test
+  mode: online # "online" or "offline" or "debug"
+
+datamodule:
+  batch_size: 32
+  num_workers: 10
+  pin_memory: False
+  use_sampler: False
+
+checkpoint:
+  save_weights_only: True
+  save_top_k: 1
+  save_last: False
+  every_n_epochs: &every_n_epochs 1
+  monitor: val_metric_kldiv
+  mode: min
+
+train:
+  epoch: &epoch 10
+  # step: 300
+  n_accumulations: 1
+  val_check_interval: 1.0
+  check_val_every_n_epoch: *every_n_epochs
+  amp: True
+  gradient_clip_val: 0.1
+  deterministic: False
+
+dataset:
+  csv_path: ../hms-harmful-brain-activity-classification/train_fold_irr_mark.csv
+  spec_dir_path: ../hms-harmful-brain-activity-classification/train_spectrograms
+  eeg_dir_path: ../hms-harmful-brain-activity-classification/train_eegs
+  # eeg_spec_dir_path: ../hms-harmful-brain-activity-classification/EEG_Spectrograms/ver3_filtered
+  fold: 0
+  k_fold: 4
+  use_kspec: False
+  normalize_method: all # "all" or "each"
+  vote_min_thresh: 0
+  eeg_nan_ratio_thresh: 1.0
+  spec_nan_ratio_thresh: 1.0
+  label_type: "Classification"
+
+transforms:
+  train:
+    # - type: HorizontalFlip
+    #   params:
+    #     p: 0.5
+    # - type: CoarseDropout # 時間方向のSpecAug
+    #   params:
+    #     p: 0.2
+    #     min_holes: 1
+    #     max_holes: 8
+    #     max_height: 128
+    #     min_width: 1
+    #     max_width: 10
+    # - type: CoarseDropout # 周波数方向のSpecAug
+    #   params:
+    #     p: 0.2
+    #     min_holes: 1
+    #     max_holes: 8
+    #     min_height: 1
+    #     max_height: 5
+    #     max_width: 256
+  val:
+
+module:
+  last_n_epoch_refined_augment: -1
+  mix_augmentation: ["mixup"] #["mixup", "alphamix"]
+  p_mix_augmentation: 0.0
+
+model:
+  name: HMS1DWaveModel
+  args:
+  load_checkpoint:
+  freeze_start:
+    target_epoch:
+    unfreeze_params:
+
+loss:
+  name: KLDivLossWithLogits
+
+optimizer:
+  # name: AdamW
+  # args:
+  #   lr: 1.e-2
+  #   weight_decay: 1.e-2 # 1e-2
+  name: SGD
+  args:
+    lr: 1.e-2
+    weight_decay: 1.e-4
+    momentum: 0.9
+    nesterov: True
+  scheduler:
+    name: CosineAnnealingLR
+    args:
+      eta_min: 1.e-6
+      last_epoch: -1
+      T_max: *epoch
+    lr_dict_param:
+      interval: epoch
+      # interval: step

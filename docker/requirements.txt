@@ -1,0 +1,9 @@
+test_tube
+omegaconf
+segmentation-models-pytorch
+mne
+audiomentations==0.26
+colorednoise
+nnAudio==0.3.1
+
+

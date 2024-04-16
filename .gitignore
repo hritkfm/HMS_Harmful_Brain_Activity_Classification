@@ -1,0 +1,16 @@
+*__pycache__*
+src/wandb/
+.vscode/
+
+experiment/*
+checkpoints/*
+hms-harmful-brain-activity-classification
+*.npy
+submissions
+upload_src
+upload_weight
+src/checkpoints/*
+*.pickle
+*.parquet
+notebooks/Untitled*
+notebooks/*
