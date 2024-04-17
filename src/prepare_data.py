@@ -152,10 +152,10 @@ def merge_fold(train, train_fold, TARGETS):
 
 if __name__ == "__main__":
     base_dir = Path("../hms-harmful-brain-activity-classification/")
-    # output_fold1 = base_dir / "train_fold_irr_mark_v2.csv"
-    # output_fold1 = base_dir / "train_fold_irr_mark_v2.csv"
-    output_fold1 = base_dir / "train_fold_latesub_v1.csv"
-    output_fold2 = base_dir / "train_fold_latesub_v2.csv"
+    output_fold1 = base_dir / "train_fold_irr_mark_v2.csv"
+    output_fold2 = base_dir / "train_fold_irr_mark_v5.csv"
+    # output_fold1 = base_dir / "train_fold_latesub_v1.csv"
+    # output_fold2 = base_dir / "train_fold_latesub_v2.csv"
 
     train_csv = base_dir / "train.csv"
     eeg_dir = base_dir / "train_eegs"
