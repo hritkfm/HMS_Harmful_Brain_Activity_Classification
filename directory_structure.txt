@@ -1,0 +1,16 @@
+.
+./docker
+./submissions
+./checkpoints
+./hms-harmful-brain-activity-classification
+./src
+./src/models
+./src/models/models1d
+./src/mydatasets
+./src/optimizers
+./src/augmentations
+./src/configs
+./src/utils
+./src/metrics
+./src/losses
+./src/modules

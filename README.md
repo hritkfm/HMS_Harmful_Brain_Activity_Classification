@@ -24,8 +24,22 @@ I recommend using docker.
 
 ### Build docker
 
-```
-docker build ./docker -t kaggle:hms
+Create a container based on docker/Dockerfile.  
+An example of creating a container is shown below.
+Adjust command options to suit your environment!
+
+```bash
+cd docker
+docker build -t kaggle:hms .
+docker container run --gpus all -id -d --net host \
+  --shm-size=40g --name hms_2024	\
+  -v $HOME/.cache/:/home/user/.cache/ \
+	-v $HOME/.kaggle/:/home/user/.kaggle/ \
+	-v $HOME/.vscode-server/:/home/user/.vscode-server/ \
+	-v $HOME/.tmp/:/home/user/.tmp/ \
+  -v $HOME/HMS_Harmful_Brain_Activity_Classification/:/home/user/HMS_Harmful_Brain_Activity_Classification/ \
+  kaggle:hms /bin/bash
+docker attach hms_2024
 ```
 
 ### Data download
@@ -34,7 +48,7 @@ Please download competition data from [kaggle](https://www.kaggle.com/competitio
 
 ### Prepare_data
 
-```
+```bash
 cd src
 python prepare_data.py
 ```
@@ -43,99 +57,58 @@ This will create `train_fold_irr_mark_v2.csv` and `train_fold_irr_mark_v5.csv` i
 
 ### Train
 
-Run the first stage learning script.
+#### 1st stage training
+
+Run the first stage training script.
 This will train 9 models.
 
-```
+```bash
 bash run_train_1st.sh
 ```
 
-※ _Note that this code uses wandb._
+When the 1st stage training is completed, a checkpoints folder(`./checkpoints`) will be created in the root directory of this project.The weights of the model and the config file in the first stage are saved in it.
 
-When the 1st stage learning is completed, a checkpoints folder will be created in the root directory of this project.The weights of the model learned in the first stage and the config file are saved in it.
+#### 2nd stage training
 
-Before executing 2nd stage learning, it is necessary to specify the model weight path.
-Write the checkpoint path for each model in checkpoints list of `run_train_2nd.sh`.  
-Example:
+Run the 2nd stage training script.  
+Please note that it will not work if there are multiple .ckpt files in the folder of each model.
 
-```
-### wavenet_maxxvitv2
-checkpoints=(
-    "../checkpoints/run-20240311_162443-wtgvtt7f-1D_cls_RTpIcS_LS_Wavenet-maxxvitv2n_1e-3_standard_e50_warmup_fold_0/epoch=48-val_metric_kldiv=0.506.ckpt"
-    "../checkpoints/run-20240311_162558-52u6k3pz-1D_cls_RTpIcS_LS_Wavenet-maxxvitv2n_1e-3_standard_e50_warmup_fold_1/epoch=39-val_metric_kldiv=0.483.ckpt"
-    "../checkpoints/run-20240311_162601-19rayuro-1D_cls_RTpIcS_LS_Wavenet-maxxvitv2n_1e-3_standard_e50_warmup_fold_2/epoch=43-val_metric_kldiv=0.531.ckpt"
-    "../checkpoints/run-20240311_162604-vhwn8ok2-1D_cls_RTpIcS_LS_Wavenet-maxxvitv2n_1e-3_standard_e50_warmup_fold_3/epoch=43-val_metric_kldiv=0.501.ckpt"
-    )
-```
-
-※ _Please write the path of the model corresponding to the comment._  
-※ _Write in order from fold0 to fold4._
-
-Run the 2nd stage learning script.
-
-```
+```bash
 bash run_train_2nd.sh
 ```
 
+Similar to the 1st stage training, model weights and config files are saved in the `checkpoints` folder.  
+The folder name containing the letters "_finetune_" is the result of the 2nd stage.
+
 ### Inference
 
-Since UEMU was responsible for the model ensemble for our team, our main objective here is to create a file to pass to UEMU. Create a file containing logit values in the same format as the sample submission for each model.
-submission.csv is also created at the same time, which is an average ensemble of 9 models, public LB = 0.250401/ purivate LB=0.301930.
+#### OOF inference
 
-- Test  
-  Run the following command.
+Output the predictions of the out of fold model used in the UEMU part. When you run this command, the `{exp_name}_logit.csv` file will be output to the submissions directory. (Other files are also output, but are not used)
+Run the following command.
 
+```bash
+python inference_hms_1d_for_oofv1.py
+python inference_hms_1d_for_oofv2.py
 ```
-python inference_hms_1d.py
+
+The output `{exp_name}_logit.csv` file is used for training the ensemble models(UEMU&kazumax&TH's part) of UEMU part.  
+Change the file name to match the UEMU part according to the experiment name(`exp_name`).
+
+exsample:
+
+```bash
+mv wavenet_effnetb4_downsample_logit.csv result_TH_wavenet_effnetb4_downsample_oof.csv
 ```
 
-A file called `{model_name}_logit.csv` will be created. Use these in the UEMU part.
+#### Test data infernce
 
-- Validation  
-  it is necessary to modify and execute the code as shown below in order to output the OOF logit value of the training data.
+see [Inference notebook](https://www.kaggle.com/code/asaliquid1011/hms-team-inference-ktmud)
 
-  - fold ver1
+If you want to inference on test data(`test.csv`) locally, run the following command.
 
-    - Change to `MODE="val"`.
-    - Change `CFG` parameters
-      - Comment out the last three models written in `checkpoints`. (Because only the first 6 models learned with fold1 are used)
-      - Change `datasets` for validation: fold v1
-      ```
-        # test:
-        # datasets: List = field(default_factory=lambda: [HMS1DDataset] * 9)
-        # validation: fold v1
-        datasets: List = field(default_factory=lambda: [HMS1DDataset] * 6)
-        # validation: fold v2
-        # datasets: List = field(default_factory=lambda: [HMS1DDataset] * 3)
-      ```
-      - Change `model_weight` to validation: fold v1  
-        Change it to the same as above using the comments as a reference.
-      - Change `model_name` to validation: fold v1  
-        Change it to the same as above using the comments as a reference.
-    - Run the following command.
+```bash
+python inference_hms_1d_for_test.py
+```
 
-    ```
-    python inference_hms_1d.py
-    ```
-
-  - fold ver2
-    - Change to `MODE="val"`.
-    - Change `CFG` parameters
-      - Comment out the first six models written in `checkpoints`. (Because only the first 3 models learned with fold2 are used)
-      - Change `datasets` for validation: fold v2
-      ```
-        # test:
-        # datasets: List = field(default_factory=lambda: [HMS1DDataset] * 9)
-        # validation: fold v1
-        # datasets: List = field(default_factory=lambda: [HMS1DDataset] * 6)
-        # validation: fold v2
-        datasets: List = field(default_factory=lambda: [HMS1DDataset] * 3)
-      ```
-      - Change `model_weight` to validation: fold v2  
-        Change it to the same as above using the comments as a reference.
-      - Change `model_name` to validation: fold v2  
-         Change it to the same as above using the comments as a reference.
-    - Run the following command.
-    ```
-    python inference_hms_1d.py
-    ```
+When executed, a `submission.csv` file is output to the `./submissions` folder, which is an ensemble of 9 models trained in the T.H. part, achieving public LB = 0.250401 / private LB=0.301930.

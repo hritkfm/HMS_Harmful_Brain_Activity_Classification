@@ -14,3 +14,15 @@ src/checkpoints/*
 *.parquet
 notebooks/Untitled*
 notebooks/*
+src/utils/clear_wandb_online_file.py
+src/utils/make_upload_file.py
+src/utils/upload_kaggle.sh
+src/run_train1.sh
+src/run_train2.sh
+src/run_train3.sh
+src/run_train4.sh
+docker/run.sh
+docker/build.sh
+HOW_TO_UPLOAD.md
+model.drawio.png
+inference.ipynb

@@ -28,25 +28,25 @@ def train(
     ckpt_name="{epoch:02}-{val_loss:.3f}",
     module_kwargs={},
 ):
-    assert cfg.logger.mode in ["online", "offline", "debug"]
+    assert cfg.logger.mode in ["online", "offline", "None"]
     gpu = cfg.gpu
     torch.cuda.set_device(gpu)
     seed = np.random.randint(65535) if cfg.seed is None else cfg.seed
     seed_everything(seed)
 
-    if cfg.logger.mode == "debug":
-        print(
-            Color.RED + "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        )
-        print("Debug Mode")
-        print(
-            "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-            + Color.RESET
-        )
+    callbacks = []
+    if cfg.logger.mode == "None":
+        # print(
+        #     Color.RED + "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        # )
+        # print("Debug Mode")
+        # print(
+        #     "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        #     + Color.RESET
+        # )
         # バックプロパゲーションがうまくいくか検査。debug時のみ
-        torch.autograd.set_detect_anomaly(True)
+        # torch.autograd.set_detect_anomaly(True)
         logger = False
-        callbacks = []
 
     else:
         logger = WandbLogger(
@@ -59,27 +59,28 @@ def train(
         logger.experiment.config.update(dict(cfg))
         logger.experiment.config.update({"dir": logger.experiment.dir})
 
-        # ckpt_dir = Path(logger.experiment.dir) / "checkpoints"
-        # ckpt_dir.mkdir(exist_ok=True, parents=True)
-        folder_name = Path(logger.experiment.dir).parent.name
-        ckpt_dir = Path("../checkpoints") / f"{folder_name}"
-        ckpt_dir.mkdir(exist_ok=True, parents=True)
-
-        checkpoint = ModelCheckpoint(
-            dirpath=ckpt_dir,
-            filename=ckpt_name,
-            save_top_k=cfg.checkpoint.save_top_k,
-            save_last=cfg.checkpoint.save_last,
-            save_weights_only=cfg.checkpoint.save_weights_only,
-            every_n_epochs=cfg.checkpoint.every_n_epochs,
-            verbose=True,
-            monitor=cfg.checkpoint.monitor,
-            mode=cfg.checkpoint.mode,
-        )
         lr_monitor = LearningRateMonitor(logging_interval=None)
-        callbacks = [checkpoint, lr_monitor]
+        callbacks.append(lr_monitor)
 
-        OmegaConf.save(cfg, ckpt_dir / "train_config.yaml")
+    # folder_name = Path(logger.experiment.dir).parent.name
+    ckpt_dir = Path("../checkpoints") / f"{cfg.logger.runName}"
+    ckpt_dir.mkdir(exist_ok=True, parents=True)
+
+    checkpoint = ModelCheckpoint(
+        dirpath=ckpt_dir,
+        filename=ckpt_name,
+        save_top_k=cfg.checkpoint.save_top_k,
+        save_last=cfg.checkpoint.save_last,
+        save_weights_only=cfg.checkpoint.save_weights_only,
+        every_n_epochs=cfg.checkpoint.every_n_epochs,
+        verbose=True,
+        monitor=cfg.checkpoint.monitor,
+        mode=cfg.checkpoint.mode,
+    )
+    callbacks.append(checkpoint)
+    # callbacks = [checkpoint, lr_monitor]
+
+    OmegaConf.save(cfg, ckpt_dir / "train_config.yaml")
 
     if getattr(cfg.train, "stochastic_weight_averaging", False):
         swa = StochasticWeightAveraging(swa_epoch_start=0.8, swa_lrs=cfg.train.swa_lrs)
@@ -90,6 +91,7 @@ def train(
         max_epochs=cfg.train.epoch,
         max_steps=cfg.train.step if "step" in cfg.train.keys() else -1,
         accumulate_grad_batches=cfg.train.n_accumulations,
+        limit_train_batches=cfg.train.limit_train_batches,
         limit_val_batches=1.0,
         val_check_interval=cfg.train.val_check_interval,
         check_val_every_n_epoch=cfg.train.check_val_every_n_epoch,
@@ -169,8 +171,8 @@ def train(
 
     trainer.fit(model, data_module)
 
-    if cfg.logger.mode != "debug":
-        logger.finalize('success')
+    if cfg.logger.mode != "None":
+        logger.finalize("success")
         for n, model_path in enumerate(Path(ckpt_dir).glob("*.ckpt")):
             name = f"model_{n}"
             logger.experiment.config.update({name: model_path.resolve()})

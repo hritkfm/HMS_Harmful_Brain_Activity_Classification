@@ -140,6 +140,7 @@ class log_best(object):
                 return True
         return False
 
+
 def make_map_anchor_to_value(yaml_path):
     with open(yaml_path, "r") as file:
         yaml_content = file.read()
@@ -195,9 +196,7 @@ def resolve_yaml_anchors_and_aliases(yaml_path, map_anchor_to_value):
                 resolved_line = f"{key}: {map_anchor_to_value[alias_name]}"
                 resolved_lines.append(resolved_line)
             else:
-                raise ValueError(
-                    f"alias *{alian_name} doesn't exist in anchors."
-                )
+                raise ValueError(f"alias *{alian_name} doesn't exist in anchors.")
         else:
             resolved_lines.append(line)
 
@@ -214,9 +213,7 @@ def parser(mode):
         required=True,
         help="path of the config file",
     )
-    parser.add_argument(
-        "--options", "-o", nargs="*", help="optional arguments"
-    )
+    parser.add_argument("--options", "-o", nargs="*", help="optional arguments")
     args = parser.parse_args()
     cfg = OmegaConf.load(args.config_file)
 
@@ -231,9 +228,7 @@ def parser(mode):
         # anchorとその値を保持する辞書を作成
         map_anchor_to_value = make_map_anchor_to_value(args.config_file)
         # dotlistに含まれるanchorの値で上書きする
-        map_anchor_to_value = overwrite_anchor_value(
-            args.options, map_anchor_to_value
-        )
+        map_anchor_to_value = overwrite_anchor_value(args.options, map_anchor_to_value)
         # anchor/aliasを解決したyamlの文字列を生成
         yaml_string = resolve_yaml_anchors_and_aliases(
             args.config_file, map_anchor_to_value
